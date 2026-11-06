@@ -98,27 +98,7 @@
   </div>
   <div id="speciesGrid" class="grid"></div>
   <div id="empty" class="empty hidden">No matching species. Try another search or check your account and Mimika place settings.</div>
-
-  <section class="panel">
-    <details class="setup">
-      <summary>Website setup / account settings</summary>
-      <p class="small">For the first preview, enter your iNaturalist username and select the correct Mimika place. To publish this for everyone, put the same values in <code>config.js</code> as described in README.md.</p>
-      <div class="setup-grid">
-        <label class="small">iNaturalist username
-          <input id="usernameInput" placeholder="Your iNaturalist username">
-        </label>
-        <label class="small">Find iNaturalist place
-          <input id="placeQuery" value="Mimika, Papua, Indonesia" placeholder="Search a place">
-        </label>
-      </div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px">
-        <button id="findPlaces" class="secondary">Find places</button>
-        <select id="placeSelect" style="max-width:420px"><option value="">Choose the correct Mimika boundary…</option></select>
-        <button id="applySettings">Apply settings</button>
-      </div>
-      <p class="small" id="settingsNote">Settings entered here are saved only in this browser. For the public website, update config.js before publishing.</p>
-    </details>
-  </section>
+  
 </main>
 <div id="detail" class="detail hidden" role="dialog" aria-modal="true" aria-label="Species details">
   <div class="detail-inner">
