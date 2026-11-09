@@ -226,7 +226,7 @@
       ]);
 
       species=s.results||[];
-      observations=o.results||[];
+      observations=o.results||[]; species.sort(()=>Math.random()-0.5);
 
       $("speciesTotal").textContent=s.total_results ?? species.length;
       $("observationTotal").textContent=o.total_results ?? observations.length;
