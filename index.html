@@ -1,3 +1,4 @@
+
 <!doctype html>
 <html lang="en">
 <head>
@@ -74,7 +75,7 @@
     <div class="eyebrow">Papua · Indonesia</div>
     <h1>Mimika Biodiversity<br>Database</h1>
     <p>A catalogue of species observed in Mimika, built from observations contributed through iNaturalist.</p>
-    <div class="hero-meta">OBSERVATIONS FROM iNATURALIST ACCOUNT</div>
+    <div class="hero-meta">OBSERVATIONS FROM APPROVED iNATURALIST ACCOUNTS</div>
   </div>
 </header>
 <main>
@@ -99,13 +100,13 @@
   <div id="speciesGrid" class="grid"></div>
   <div id="empty" class="empty hidden">No matching species. Try another search or check your settings.</div>
 
-<section class="panel">
+  <section class="panel">
     <details class="setup">
       <summary>Website setup / account settings</summary>
-      <p class="small">For the first preview, enter your iNaturalist username and select the correct Mimika place. To publish this for everyone, put the same values in <code>config.js</code> as described in README.md.</p>
+      <p class="small">Enter the approved iNaturalist usernames, separated by commas, and select the correct Mimika place. Only observations from these accounts will be included.</p>
       <div class="setup-grid">
-        <label class="small">iNaturalist username
-          <input id="usernameInput" placeholder="Your iNaturalist username">
+        <label class="small">Approved iNaturalist usernames (comma-separated)
+          <input id="usernameInput" placeholder="nk_nisaa, imamthidayat">
         </label>
         <label class="small">Find iNaturalist place
           <input id="placeQuery" value="Mimika, Papua, Indonesia" placeholder="Search a place">
@@ -116,10 +117,9 @@
         <select id="placeSelect" style="max-width:420px"><option value="">Choose the correct Mimika boundary…</option></select>
         <button id="applySettings">Apply settings</button>
       </div>
-      <p class="small" id="settingsNote">Settings entered here are saved only in this browser. For the public website, update config.js before publishing.</p>
+      <p class="small" id="settingsNote">Settings entered here are saved only in this browser. The public website uses the approved usernames in config.js.</p>
     </details>
   </section>
-  
 </main>
 <div id="detail" class="detail hidden" role="dialog" aria-modal="true" aria-label="Species details">
   <div class="detail-inner">
@@ -137,31 +137,59 @@
   const API = "https://api.inaturalist.org/v1";
   const config = window.MIMIKA_CONFIG || {};
   const $ = id => document.getElementById(id);
-  let username = config.username || "";
+
+  let usernames = Array.isArray(config.usernames)
+    ? [...new Set(config.usernames.map(u => String(u).trim()).filter(Boolean))]
+    : (config.username ? [String(config.username).trim()] : []);
+
   let placeId = config.placeId || "";
   let species = [];
   let observations = [];
   let placeName = config.placeName || "Mimika";
+
   const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
   const api = async (path, params={}) => {
     const url = new URL(API + path);
-    Object.entries(params).forEach(([k,v]) => { if(v !== "" && v != null) url.searchParams.set(k,v); });
+    Object.entries(params).forEach(([k,v]) => {
+      if(v !== "" && v != null) url.searchParams.set(k,v);
+    });
     const r = await fetch(url);
     if(!r.ok) throw new Error(`iNaturalist API returned ${r.status}`);
     return r.json();
   };
-  function say(message, error=false){ $("message").textContent=message; $("message").className="status"+(error?" error":""); }
-  function params(){ return {user_login:username, place_id:placeId, per_page:500}; }
-  function groupName(t){ return t?.iconic_taxon_name || t?.rank || "Other"; }
-  function imageFor(t){ return t?.default_photo?.medium_url || t?.default_photo?.square_url || ""; }
+
+  function say(message, error=false){
+    $("message").textContent=message;
+    $("message").className="status"+(error?" error":"");
+  }
+
+  function params(){
+    return {
+      user_id:usernames.join(","),
+      place_id:placeId,
+      per_page:500
+    };
+  }
+
+  function groupName(t){
+    return t?.iconic_taxon_name || t?.rank || "Other";
+  }
+
+  function imageFor(t){
+    return t?.default_photo?.medium_url || t?.default_photo?.square_url || "";
+  }
+
   function render(){
     const q = ($("search").value + " " + $("speciesSearch").value).trim().toLowerCase();
     const group = $("groupFilter").value;
+
     const list = species.filter(x => {
       const t=x.taxon||{};
       const hay=[t.name,t.preferred_common_name,t.wikipedia_title,t.ancestors?.map(a=>a.name).join(" ")].join(" ").toLowerCase();
       return (!q || hay.includes(q)) && (!group || groupName(t)===group);
     });
+
     $("speciesGrid").innerHTML = list.map(x=>{
       const t=x.taxon||{}, img=imageFor(t);
       return `<article class="species-card" data-id="${t.id}">
@@ -171,80 +199,170 @@
         <div class="species-foot"><span>${esc(groupName(t))}</span><strong>${x.count} obs.</strong></div></div>
       </article>`;
     }).join("");
+
     $("empty").classList.toggle("hidden",list.length!==0);
     $("resultLabel").textContent=`Showing ${list.length} of ${species.length} species`;
-    document.querySelectorAll(".species-card").forEach(card=>card.addEventListener("click",()=>openSpecies(card.dataset.id)));
+
+    document.querySelectorAll(".species-card").forEach(card=>
+      card.addEventListener("click",()=>openSpecies(card.dataset.id))
+    );
   }
+
   async function load(){
-    if(!username || !placeId){ say("Open “Website setup / account settings” below to enter your iNaturalist username and select the Mimika place.",true); return; }
-    $("refresh").disabled=true; say("Retrieving your Mimika observations from iNaturalist…");
+    if(!usernames.length || !placeId){
+      say("Open “Website setup / account settings” below to enter approved iNaturalist usernames and select the Mimika place.",true);
+      return;
+    }
+
+    $("refresh").disabled=true;
+    say("Retrieving your Mimika observations from iNaturalist…");
+
     try{
       const p=params();
+
       const [s,o]=await Promise.all([
         api("/observations/species_counts",{...p,order:"desc",order_by:"count"}),
         api("/observations",{...p,photos:"true",per_page:200,order:"desc",order_by:"observed_on"})
       ]);
-      species=s.results||[]; observations=o.results||[]; species.sort(()=>Math.random()-0.5);
+
+      species=s.results||[];
+      observations=o.results||[];
+
       $("speciesTotal").textContent=s.total_results ?? species.length;
       $("observationTotal").textContent=o.total_results ?? observations.length;
+
       const groups=[...new Set(species.map(x=>groupName(x.taxon)))].sort();
       $("groupTotal").textContent=groups.length;
+
       $("groupFilter").innerHTML='<option value="">All groups</option>'+groups.map(g=>`<option>${esc(g)}</option>`).join("");
+
       render();
-      say(`Loaded ${species.length} species and ${observations.length} recent photo observations for @${username} in ${placeName}.`);
-    }catch(e){say(`Could not load data: ${e.message}. Check your username, place selection, internet connection, or iNaturalist API availability.`,true);}
-    finally{$("refresh").disabled=false;}
+
+      say(`Loaded ${species.length} species and ${observations.length} recent photo observations from ${usernames.length} approved contributor(s) in ${placeName}.`);
+
+    }catch(e){
+      say(`Could not load data: ${e.message}. Check your usernames, place selection, internet connection, or iNaturalist API availability.`,true);
+    }finally{
+      $("refresh").disabled=false;
+    }
   }
+
   async function openSpecies(id){
-    const item=species.find(x=>String(x.taxon?.id)===String(id)); if(!item)return;
+    const item=species.find(x=>String(x.taxon?.id)===String(id));
+    if(!item)return;
+
     const t=item.taxon||{};
+
     $("detailContent").innerHTML=`<h2>${esc(t.preferred_common_name||t.name)}</h2><div class="latin">${esc(t.name)}</div>
-      <p class="small">${esc(t.rank||"")} · ${esc(groupName(t))} · ${item.count} observations in your account</p>
+      <p class="small">${esc(t.rank||"")} · ${esc(groupName(t))} · ${item.count} observations from approved contributors</p>
       ${imageFor(t)?`<img class="detail-photo" src="${esc(t.default_photo.medium_url||imageFor(t))}" alt="${esc(t.name)}">`:""}
       <p><a target="_blank" rel="noopener" href="https://www.inaturalist.org/taxa/${t.id}">View taxon on iNaturalist ↗</a></p>
       <h3>Recent observations</h3><div id="speciesObs" class="obs-grid">Loading…</div>`;
+
     $("detail").classList.remove("hidden");
+
     try{
-      const result=await api("/observations",{user_login:username,place_id:placeId,taxon_id:id,photos:"true",per_page:24,order:"desc",order_by:"observed_on"});
+      const result=await api("/observations",{
+        ...params(),
+        taxon_id:id,
+        photos:"true",
+        per_page:24,
+        order:"desc",
+        order_by:"observed_on"
+      });
+
       $("speciesObs").innerHTML=(result.results||[]).map(o=>{
         const photo=o.photos?.[0]?.url?.replace("square.","medium.")||o.photos?.[0]?.url||"";
         const date=o.observed_on||"Date not recorded";
         const loc=o.place_guess||"Location not specified";
+
         return `<div class="obs">${photo?`<img loading="lazy" src="${esc(photo)}" alt="">`:""}<div><a target="_blank" rel="noopener" href="https://www.inaturalist.org/observations/${o.id}">${esc(date)} ↗</a><br>${esc(loc)}<br>by ${esc(o.user?.login||"Unknown observer")}</div></div>`;
       }).join("") || "No photo observations found.";
-    }catch(e){$("speciesObs").textContent="Could not retrieve species observations.";}
+
+    }catch(e){
+      $("speciesObs").textContent="Could not retrieve species observations.";
+    }
   }
+
   $("closeDetail").addEventListener("click",()=>$("detail").classList.add("hidden"));
-  $("detail").addEventListener("click",e=>{if(e.target===$("detail"))$("detail").classList.add("hidden");});
-  $("search").addEventListener("input",render); $("speciesSearch").addEventListener("input",render);
-  $("groupFilter").addEventListener("change",render); $("refresh").addEventListener("click",load);
-  $("usernameInput").value=username;
+
+  $("detail").addEventListener("click",e=>{
+    if(e.target===$("detail"))$("detail").classList.add("hidden");
+  });
+
+  $("search").addEventListener("input",render);
+  $("speciesSearch").addEventListener("input",render);
+  $("groupFilter").addEventListener("change",render);
+  $("refresh").addEventListener("click",load);
+
+  $("usernameInput").value=usernames.join(", ");
+
   $("findPlaces").addEventListener("click",async()=>{
-    const b=$("findPlaces");b.disabled=true;
+    const b=$("findPlaces");
+    b.disabled=true;
+
     try{
       const r=await api("/places/autocomplete",{q:$("placeQuery").value});
       const list=r.results||[];
+
       $("placeSelect").innerHTML='<option value="">Choose the correct place…</option>'+list.map(p=>`<option value="${p.id}" data-name="${esc(p.display_name||p.name)}">${esc(p.display_name||p.name)} · ID ${p.id}</option>`).join("");
-      if(!list.length) say("No matching iNaturalist places found. Try another search phrase.",true);
-    }catch(e){say("Could not search iNaturalist places: "+e.message,true);}
-    finally{b.disabled=false;}
+
+      if(!list.length)say("No matching iNaturalist places found. Try another search phrase.",true);
+
+    }catch(e){
+      say("Could not search iNaturalist places: "+e.message,true);
+    }finally{
+      b.disabled=false;
+    }
   });
+
   $("applySettings").addEventListener("click",()=>{
-    username=$("usernameInput").value.trim();
+    usernames=[...new Set($("usernameInput").value.split(",").map(u=>u.trim()).filter(Boolean))];
+
     const opt=$("placeSelect").selectedOptions[0];
-    if(opt?.value){placeId=opt.value;placeName=opt.dataset.name||"Mimika";}
-    if(!username||!placeId){say("Please enter your username and choose a place first.",true);return;}
-    try{localStorage.setItem("mimikaUsername",username);localStorage.setItem("mimikaPlaceId",placeId);localStorage.setItem("mimikaPlaceName",placeName);}catch(e){}
+
+    if(opt?.value){
+      placeId=opt.value;
+      placeName=opt.dataset.name||"Mimika";
+    }
+
+    if(!usernames.length||!placeId){
+      say("Please enter at least one approved username and choose a place first.",true);
+      return;
+    }
+
+    try{
+      localStorage.setItem("mimikaUsernames",usernames.join(","));
+      localStorage.setItem("mimikaPlaceId",placeId);
+      localStorage.setItem("mimikaPlaceName",placeName);
+    }catch(e){}
+
     load();
   });
+
   try{
-    username=localStorage.getItem("mimikaUsername")||username;
+    const savedUsernames=localStorage.getItem("mimikaUsernames");
+
+    if(savedUsernames){
+      usernames=[...new Set(savedUsernames.split(",").map(u=>u.trim()).filter(Boolean))];
+    }else if(!Array.isArray(config.usernames)){
+      const oldUsername=localStorage.getItem("mimikaUsername");
+      if(oldUsername)usernames=[oldUsername.trim()];
+    }
+
     placeId=localStorage.getItem("mimikaPlaceId")||placeId;
     placeName=localStorage.getItem("mimikaPlaceName")||placeName;
-    $("usernameInput").value=username;
+
+    $("usernameInput").value=usernames.join(", ");
+
   }catch(e){}
-  if(username && placeId) load();
-  else say("Welcome! Set your iNaturalist username and select the correct Mimika place in “Website setup / account settings” below.");
+
+  if(usernames.length && placeId){
+    load();
+  }else{
+    say("Welcome! Enter the approved iNaturalist usernames and select the correct Mimika place in “Website setup / account settings” below.");
+  }
+
 })();
 </script>
 </body>
