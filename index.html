@@ -186,6 +186,7 @@
         api("/observations",{...p,photos:"true",per_page:200,order:"desc",order_by:"observed_on"})
       ]);
       species=s.results||[]; observations=o.results||[];
+      species.sort(()=>Math.random()-0.5);
       $("speciesTotal").textContent=s.total_results ?? species.length;
       $("observationTotal").textContent=o.total_results ?? observations.length;
       const groups=[...new Set(species.map(x=>groupName(x.taxon)))].sort();
