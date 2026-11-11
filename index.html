@@ -239,12 +239,6 @@
     try{localStorage.setItem("mimikaUsername",username);localStorage.setItem("mimikaPlaceId",placeId);localStorage.setItem("mimikaPlaceName",placeName);}catch(e){}
     load();
   });
-  try{
-    username=localStorage.getItem("mimikaUsername")||username;
-    placeId=localStorage.getItem("mimikaPlaceId")||placeId;
-    placeName=localStorage.getItem("mimikaPlaceName")||placeName;
-    $("usernameInput").value=username;
-  }catch(e){}
   if(username && placeId) load();
   else say("Welcome! Set your iNaturalist username and select the correct Mimika place in “Website setup / account settings” below.");
 })();
